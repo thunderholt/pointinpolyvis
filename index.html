@@ -1,0 +1,393 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        margin: 0px;
+        font-family: arial;
+        font-size: 14px;
+        color: #5c6d70;
+      }
+
+      header {
+        padding: 20px;
+        background-color: #484a47;
+      }
+
+      h1 {
+        font-size: 20px;
+        margin-top: 0px;
+        margin-bottom: 0px;
+        text-align: center;
+        color: #e0ac9d;
+      }
+
+      .ui {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+
+      .intro {
+        flex: 0;
+        padding: 20px;
+        background-color: #e0ac9d;
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ui">
+      <header>
+        <h1>Point-in-polygon Algorithm Visualiser</h1>
+      </header>
+      <div class="intro">
+        <p>For any polygon, it is possible to determine if a point lies within its boundaries by tracing a 
+        line from the point to any other point known to lie outside of the polygon, and then counting the 
+        number of intersections with the polygon's edges. If the number of intersections is odd, then
+        the point lies with within the polygon.</thead></p>
+        <button onclick="regenerateRandomPolygon()">
+          Generate random polygon
+        </button>
+      </div>
+      <div style="flex: 1;">
+        <canvas id="canvas" style="width: 100%; height: 100%;"></canvas>
+      </div>
+    </div>
+  </body>
+  <script>
+    let Vec2 = {
+      scale: function (v, s) {
+        return [v[0] * s, v[1] * s];
+      },
+      add: function (v0, v1) {
+        return [v0[0] + v1[0], v0[1] + v1[1]];
+      },
+      sub: function (v0, v1) {
+        return [v0[0] - v1[0], v0[1] - v1[1]];
+      },
+      mul: function (v0, v1) {
+        return [v0[0] * v1[0], v0[1] * v1[1]];
+      },
+      cross: function (v0, v1) {
+        return v0[0] * v1[1] - v0[1] * v1[0];
+      },
+      scaleThenAdd(v0, v1, s) {
+        return Vec2.add(v0, Vec2.scale(v1, s));
+      },
+      length: function (v) {
+        return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+      },
+      distance: function (v0, v1) {
+        return Vec2.length(Vec2.sub(v1, v0));
+      },
+    };
+
+    function lerp(a, b, amount) {
+      return a + (b - a) * amount;
+    }
+
+    function invLerp(a, b, l) {
+      return (l - a) / (b - a);
+    }
+
+    let polygon = null;
+    let clickPoint = [0, 0];
+    let patternImg = null;
+    let fillPattern = null;
+    let isInside = false;
+    let hitCount = 0;
+    let intersections = [];
+
+    function init() {
+      const canvas = document.getElementById("canvas");
+      const context = canvas.getContext("2d");
+      canvas.width = canvas.getBoundingClientRect().width;
+      canvas.height = canvas.getBoundingClientRect().height;
+
+      canvas.addEventListener("click", (args) => {
+        clickPoint = [args.offsetX, args.offsetY];
+        update();
+      });
+
+      clickPoint = [canvas.width / 2, canvas.height / 2];
+
+      patternImg = new Image();
+      patternImg.src = 'bg.png';
+      patternImg.onload = function() {
+        fillPattern = context.createPattern(patternImg, 'repeat');
+        regenerateRandomPolygon();
+      };
+
+      
+    }
+
+    function regenerateRandomPolygon() {
+      const canvas = document.getElementById("canvas");
+      polygon = generateRandomPolygon(
+        canvas.width, canvas.height,
+        20
+      );
+
+      update();
+
+      window.onresize = update;
+    }
+
+    function update() {
+      const canvas = document.getElementById("canvas");
+      const context = canvas.getContext("2d");
+
+      canvas.width = canvas.getBoundingClientRect().width;
+      canvas.height = canvas.getBoundingClientRect().height;
+      
+
+      hitCount = 0;
+      intersections = [];
+
+      for (let i = 0; i < polygon.perimeterPoints.length; i++) {
+        let j = i < polygon.perimeterPoints.length - 1 ? i + 1 : 0;
+        let a = polygon.perimeterPoints[i];
+        let b = polygon.perimeterPoints[j];
+
+        const intersectionResult = findLineLineIntersection(
+          clickPoint[0],
+          clickPoint[1],
+          0,
+          0,
+          a[0],
+          a[1],
+          b[0],
+          b[1]
+        );
+        if (intersectionResult.intersects) {
+          intersections.push(intersectionResult.point);
+          hitCount++;
+        }
+      }
+
+      for (
+        let cutOutIndex = 0;
+        cutOutIndex < polygon.cutOuts.length;
+        cutOutIndex++
+      ) {
+        const cutOut = polygon.cutOuts[cutOutIndex];
+        for (let i = 0; i < cutOut.points.length; i++) {
+          let j = i < cutOut.points.length - 1 ? i + 1 : 0;
+          let a = cutOut.points[i];
+          let b = cutOut.points[j];
+
+          const intersectionResult = findLineLineIntersection(
+            clickPoint[0],
+            clickPoint[1],
+            0,
+            0,
+            a[0],
+            a[1],
+            b[0],
+            b[1]
+          );
+          if (intersectionResult.intersects) {
+            intersections.push(intersectionResult.point);
+            hitCount++;
+          }
+        }
+      }
+
+      isInside = hitCount % 2 > 0;
+
+      drawDiagram();
+    }
+
+    function drawDiagram() {
+      const canvas = document.getElementById("canvas");
+      const context = canvas.getContext("2d");
+      context.fillStyle = fillPattern;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawPolygon(context, polygon.perimeterPoints, isInside ? "#007F0E" : "#7F0000", true);
+
+      for (let i = 0; i < polygon.cutOuts.length; i++) {
+        const cutOut = polygon.cutOuts[i];
+        drawPolygon(context, cutOut.points, fillPattern, true);
+      }
+
+      drawCircle(context, clickPoint, 3, "#0f0");
+      drawCircle(context, [0, 0], 3, "#00f");
+
+      context.setLineDash([5, 3]);
+      context.strokeStyle = '#A37774';
+      context.lineWidth = 2;
+      context.beginPath();
+      context.moveTo(clickPoint[0], clickPoint[1]);
+      context.lineTo(0, 0);
+      context.stroke();
+
+      for (let i = 0; i < intersections.length; i++) {
+        drawCircle(context, intersections[i], 3, "#f00");
+      }
+
+      let textX = canvas.width - 230;
+      let textY = canvas.height - 70;
+
+      if (isInside) {
+        context.fillStyle = "#007F0E";
+        context.font = "normal 16px Arial";
+        context.fillText(
+          `Intersection count = ${hitCount} (Odd)`,
+          textX,
+          textY
+        );
+        context.font = "bold 16px Arial";
+        context.fillText("Point is inside polygon", textX, textY + 25);
+      } else {
+        context.fillStyle = "#7F0000";
+        context.font = "normal 16px Arial";
+        context.fillText(
+          `Intersection count = ${hitCount} (Even)`,
+          textX,
+          textY
+        );
+        context.font = "bold 16px Arial";
+        context.fillText("Point is outside polygon", textX, textY + 25);
+      }
+    }
+
+    function drawPolygon(context, points, colour, fill) {
+      context.fillStyle = colour;
+      context.beginPath();
+      context.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) {
+        context.lineTo(points[i][0], points[i][1]);
+      }
+      context.closePath();
+      if (fill) {
+        context.fill();
+      } else {
+        context.stroke();
+      }
+    }
+
+    function drawCircle(context, position, radius, colour) {
+      context.fillStyle = colour;
+      context.beginPath();
+      context.arc(position[0], position[1], radius, 0, 2 * Math.PI);
+      context.fill();
+    }
+
+    function generateRandomPolygon(width, height, perimeterPointCount) {
+      const size = Math.min(width, height);
+      const centeringNudge = [(width - size) / 2, (height - size) / 2];
+
+      const origin = [size / 2, size / 2];
+      const polygon = {
+        perimeterPoints: [],
+        cutOuts: [],
+      };
+
+      for (let i = 0; i < perimeterPointCount; i++) {
+        const angle = ((Math.PI * 2) / perimeterPointCount) * i;
+        const direction = [Math.sin(angle), Math.cos(angle)];
+        const scaledDirection = Vec2.scale(
+          direction,
+          lerp(0.4, 1.0, Math.random())
+        );
+        const offset = Vec2.mul(scaledDirection, [size / 2, size / 2]);
+        const point = Vec2.add(origin, offset);
+        polygon.perimeterPoints.push(point);
+      }
+
+      let cutOutPointCount = 3;
+      let numberOfCutOuts = perimeterPointCount / (cutOutPointCount + 1);
+      for (let cutOutIndex = 0; cutOutIndex < numberOfCutOuts; cutOutIndex++) {
+        let startPointIndex = cutOutIndex * (cutOutPointCount + 1);
+        let innerPoints = [];
+        let outerPoints = [];
+
+        for (
+          let i = startPointIndex;
+          i <= startPointIndex + cutOutPointCount;
+          i++
+        ) {
+          const angle = ((Math.PI * 2) / perimeterPointCount) * i;
+          const direction = [Math.sin(angle), Math.cos(angle)];
+
+          const perimeterPointDistanceFromOrigin = Vec2.distance(
+            origin,
+            polygon.perimeterPoints[i]
+          );
+          const innerPointDistanceFromOrigin =
+            lerp(0.2, 0.5, Math.random()) * perimeterPointDistanceFromOrigin;
+          const outerPointDistanceFromOrigin =
+            innerPointDistanceFromOrigin +
+            lerp(0.2, 0.8, Math.random()) *
+              (perimeterPointDistanceFromOrigin - innerPointDistanceFromOrigin);
+
+          innerPoints.push(
+            Vec2.scaleThenAdd(origin, direction, innerPointDistanceFromOrigin)
+          );
+          outerPoints.push(
+            Vec2.scaleThenAdd(origin, direction, outerPointDistanceFromOrigin)
+          );
+        }
+
+        let cutOut = {
+          points: [],
+        };
+
+        for (let i = 0; i < outerPoints.length; i++) {
+          cutOut.points.push(outerPoints[i]);
+        }
+
+        for (let i = innerPoints.length - 1; i >= 0; i--) {
+          cutOut.points.push(innerPoints[i]);
+        }
+
+        polygon.cutOuts.push(cutOut);
+      }
+
+      // Nudge all of the points into the centre.
+      for (let i = 0; i < polygon.perimeterPoints.length; i++) {
+        polygon.perimeterPoints[i] = Vec2.add(polygon.perimeterPoints[i], centeringNudge);
+      }
+
+      for (let cutOutIndex = 0; cutOutIndex < numberOfCutOuts; cutOutIndex++) {
+        let cutOut = polygon.cutOuts[cutOutIndex];
+        for (let i = 0; i < cutOut.points.length; i++) {
+          cutOut.points[i] = Vec2.add(cutOut.points[i], centeringNudge);
+        }
+      }
+
+      return polygon;
+    }
+
+    //void EliminationMethd2DLineIntersection::intersection1(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4)
+
+    function findLineLineIntersection(x1, y1, x2, y2, x3, y3, x4, y4) {
+      const result = {
+        intersects: false,
+        point: [0, 0],
+      };
+
+      const p = [x1, y1];
+      const r = [x2 - x1, y2 - y1];
+      const q = [x3, y3];
+      const s = [x4 - x3, y4 - y3];
+
+      const rCrossS = Vec2.cross(r, s);
+      const qpCrossS = Vec2.cross(Vec2.sub(q, p), s);
+      const qpCrossR = Vec2.cross(Vec2.sub(q, p), r);
+      const t = qpCrossS / rCrossS;
+      const u = qpCrossR / rCrossS;
+
+      if (rCrossS != 0 && t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        result.intersects = true;
+        result.point = Vec2.scaleThenAdd(p, r, t);
+      }
+
+      return result;
+    }
+
+    init();
+  </script>
+</html>
