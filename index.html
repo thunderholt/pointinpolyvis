@@ -92,6 +92,7 @@
     }
 
     let polygon = null;
+    let outsidePoint = [10, 10];
     let clickPoint = [0, 0];
     let patternImg = null;
     let fillPattern = null;
@@ -153,8 +154,8 @@
         const intersectionResult = findLineLineIntersection(
           clickPoint[0],
           clickPoint[1],
-          0,
-          0,
+          outsidePoint[0],
+          outsidePoint[1],
           a[0],
           a[1],
           b[0],
@@ -180,8 +181,8 @@
           const intersectionResult = findLineLineIntersection(
             clickPoint[0],
             clickPoint[1],
-            0,
-            0,
+            outsidePoint[0],
+            outsidePoint[1],
             a[0],
             a[1],
             b[0],
@@ -213,14 +214,14 @@
       }
 
       drawCircle(context, clickPoint, 3, "#0f0");
-      drawCircle(context, [0, 0], 3, "#00f");
+      drawCircle(context, outsidePoint, 3, "#00f");
 
       context.setLineDash([5, 3]);
       context.strokeStyle = '#A37774';
       context.lineWidth = 2;
       context.beginPath();
       context.moveTo(clickPoint[0], clickPoint[1]);
-      context.lineTo(0, 0);
+      context.lineTo(outsidePoint[0], outsidePoint[1]);
       context.stroke();
 
       for (let i = 0; i < intersections.length; i++) {
